@@ -26,6 +26,13 @@
             sortDescImage: "../images/sort-desc.png"
         };
         var $menu;
+        var filterType = {
+            "WILDCARD": 0,
+            "RANGE": 1,
+            "MULTI_SELECT": 2,
+            "PERCENTAGE": 3,
+            "DATE": 4
+        };
 
         function init(g) {
             options = $.extend(true, {}, defaults, options);
@@ -61,6 +68,7 @@
         function handleHeaderCellRendered(e, args) {
             console.log('handleHeaderCellRendered');
             var column = args.column;
+            if (column.filter === undefined) return;
 
             var $el = $("<div></div>")
                 .addClass("slick-header-menubutton")
@@ -103,9 +111,29 @@
             var columnDef = $menuButton.data("column");
 
             columnDef.filterValues = columnDef.filterValues || [];
+            columnDef.rangeValues = columnDef.rangeValues || [];
+            columnDef.dateValues = columnDef.dateValues || [];
+            columnDef.wildcardValues = columnDef.wildcardValues || [];
 
             // WorkingFilters is a copy of the filters to enable apply/cancel behaviour
-            var workingFilters = columnDef.filterValues.slice(0);
+            var workingFilters;;
+            switch (columnDef.filter){
+                case filterType.WILDCARD:
+                    workingFilters = columnDef.wildcardValues.slice(0);
+                    break;
+                case filterType.RANGE:
+                    workingFilters = columnDef.rangeValues.slice(0);
+                    break;
+                case filterType.MULTI_SELECT:
+                    workingFilters = columnDef.filterValues.slice(0);
+                    break;
+                case filterType.PERCENTAGE:
+//                    workingFilters = columnDef.percetageValues.slice(0);
+                    break;
+                case filterType.DATE:
+                    workingFilters = columnDef.dateValues.slice(0);
+                    break;
+            }
 
             var filterItems;
 
@@ -124,17 +152,37 @@
 
             $menu.empty();
 
-            addMenuItem($menu, columnDef, 'Sort Ascending', 'sort-asc', options.sortAscImage);
-            addMenuItem($menu, columnDef, 'Sort Descending', 'sort-desc', options.sortDescImage);
+            if (options.showSortInMenu){
+                addMenuItem($menu, columnDef, 'Sort Ascending', 'sort-asc', options.sortAscImage);
+                addMenuItem($menu, columnDef, 'Sort Descending', 'sort-desc', options.sortDescImage);
+            }
 
-            var filterOptions = "<label><input type='checkbox' value='-1' />(Select All)</label>";
 
-            for (var i = 0; i < filterItems.length; i++) {
-                var filtered = _.contains(workingFilters, filterItems[i]);
+            var filterOptions;
+            switch (columnDef.filter){
+                case filterType.WILDCARD:
+                    var inputVal = columnDef.wildcardValues.length > 0 ? columnDef.wildcardValues[0] : '';
+                    filterOptions = "<label><input type='text' value='" + inputVal + "' /></label>";
+                    break;
+                case filterType.RANGE:
+                    var rangeFromVal = columnDef.rangeValues.length > 0 ? columnDef.rangeValues[0] : '';
+                    var rangeToVal = columnDef.rangeValues.length > 1 ? columnDef.rangeValues[1] : '';
+                    filterOptions = "<label><input type='number' id='from' value='" + rangeFromVal + "'  /> <br>to<br> <input type='number' id='to' value='" + rangeToVal + "'  /></label>";
+                    break;
+                case filterType.MULTI_SELECT:
+                    filterOptions = "<label><input type='checkbox' value='-1' />(Select All)</label>";
+                    for (var i = 0; i < filterItems.length; i++) {
+                        var filtered = _.contains(workingFilters, filterItems[i]);
 
-                filterOptions += "<label><input type='checkbox' value='" + i + "'"
-                                 + (filtered ? " checked='checked'" : "")
-                                 + "/>" + filterItems[i] + "</label>";
+                        filterOptions += "<label><input type='checkbox' value='" + i + "'"
+                            + (filtered ? " checked='checked'" : "")
+                            + "/>" + filterItems[i] + "</label>";
+                    }
+                    break;
+                case filterType.PERCENTAGE:
+                    break;
+                case filterType.DATE:
+                    break;
             }
 
             var $filter = $("<div class='filter'>")
@@ -144,8 +192,32 @@
             $('<button>OK</button>')
                 .appendTo($menu)
                 .bind('click', function (ev) {
-                    columnDef.filterValues = workingFilters.splice(0);
-                    setButtonImage($menuButton, columnDef.filterValues.length > 0);
+                    switch (columnDef.filter){
+                        case filterType.WILDCARD:
+                            columnDef.wildcardValues = workingFilters.splice(0);
+                            setButtonImage($menuButton,
+                                    columnDef.wildcardValues.length > 0
+                            );
+                            break;
+                        case filterType.RANGE:
+                            columnDef.rangeValues = workingFilters.splice(0);
+                            setButtonImage($menuButton,
+                                    columnDef.rangeValues.length > 1
+                            );
+                            break;
+                        case filterType.MULTI_SELECT:
+                            columnDef.wildcardValues = workingFilters.splice(0);
+                            setButtonImage($menuButton,
+                                    columnDef.filterValues.length > 0
+                            );
+                            break;
+                        case filterType.PERCENTAGE:
+                            break;
+                        case filterType.DATE:
+                            break;
+                    }
+
+
                     handleApply(ev, columnDef);
                 });
 
@@ -153,6 +225,9 @@
                 .appendTo($menu)
                 .bind('click', function (ev) {
                     columnDef.filterValues.length = 0;
+                    columnDef.rangeValues.length = 0;
+                    columnDef.dateValues.length = 0;
+                    columnDef.wildcardValues.length = 0;
                     setButtonImage($menuButton, false);
                     handleApply(ev, columnDef);
                 });
@@ -163,6 +238,18 @@
 
             $(':checkbox', $filter).bind('click', function () {
                 workingFilters = changeWorkingFilter(filterItems, workingFilters, $(this));
+            });
+
+            $(':text', $filter).bind('change keyup', function () {
+                workingFilters[0] = $(this).val();
+            });
+
+            $('#from', $filter).bind('change keyup', function () {
+                workingFilters[0] = $(this).val();
+            });
+
+            $('#to', $filter).bind('change keyup', function () {
+                workingFilters[1] = $(this).val();
             });
 
             var offset = $(this).offset();
@@ -262,11 +349,48 @@
             e.stopPropagation();
         }
 
+        function filterFunc(item) {
+            var columns = grid.getColumns();
+
+            var value = true;
+            for (var i = 0; i < columns.length; i++) {
+                var col = columns[i];
+                switch (col.filter) {
+                    case filterType.WILDCARD:
+                        var wildcardValues = col.wildcardValues;
+                        if (wildcardValues && wildcardValues.length > 0) {
+                            value = value & _.contains(wildcardValues, item[col.field]);
+                        }
+                        break;
+                    case filterType.RANGE:
+                        var rangeValues = col.rangeValues;
+                        if (rangeValues && rangeValues.length > 1) {
+                            value = value & item[col.field] >= rangeValues[0] & item[col.field] <= rangeValues[1];
+                        }
+                        break;
+                    case filterType.MULTI_SELECT:
+                        var filterValues = col.filterValues;
+                        if (filterValues && filterValues.length > 0) {
+                            value = value & _.contains(filterValues, item[col.field]);
+                        }
+
+                        break;
+                    case filterType.PERCENTAGE:
+                        break;
+                    case filterType.DATE:
+                        break;
+                }
+            }
+            return value;
+        }
+
         $.extend(this, {
             "init": init,
             "destroy": destroy,
             "onFilterApplied": new Slick.Event(),
-            "onCommand": new Slick.Event()
+            "onCommand": new Slick.Event(),
+            "filterFunc": filterFunc,
+            "filterType": filterType
         });
     }
 })(jQuery);
