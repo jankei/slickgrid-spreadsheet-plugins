@@ -54,7 +54,7 @@
 
         function handleBodyMouseDown(e) {
             if ($menu && $menu[0] != e.target && !$.contains($menu[0], e.target)) {
-                hideMenu();
+//                hideMenu();
             }
         }
 
@@ -113,6 +113,7 @@
             columnDef.filterValues = columnDef.filterValues || [];
             columnDef.rangeValues = columnDef.rangeValues || [];
             columnDef.dateValues = columnDef.dateValues || [];
+            columnDef.percentageValues = columnDef.percentageValues || [];
             columnDef.wildcardValues = columnDef.wildcardValues || [];
 
             // WorkingFilters is a copy of the filters to enable apply/cancel behaviour
@@ -128,7 +129,7 @@
                     workingFilters = columnDef.filterValues.slice(0);
                     break;
                 case filterType.PERCENTAGE:
-//                    workingFilters = columnDef.percetageValues.slice(0);
+                    workingFilters = columnDef.percentageValues.slice(0);
                     break;
                 case filterType.DATE:
                     workingFilters = columnDef.dateValues.slice(0);
@@ -180,14 +181,42 @@
                     }
                     break;
                 case filterType.PERCENTAGE:
+                    var inputVal = columnDef.percentageValues.length > 0 ? columnDef.percentageValues[0] : '';
+                    filterOptions = "<label><input type='range' id='percentage' min='0' max='100' value='" + inputVal + "' /></label>";
                     break;
                 case filterType.DATE:
+                    filterOptions = "<label><input name='daterange' id='daterange'></label>";
                     break;
             }
 
             var $filter = $("<div class='filter'>")
                            .append($(filterOptions))
                            .appendTo($menu);
+
+            if (columnDef.filter === filterType.DATE)
+            {
+                var dateFromVal = columnDef.dateValues.length > 0 ? columnDef.dateValues[0] : moment();
+                var dateToVal = columnDef.dateValues.length > 1 ? columnDef.dateValues[1] : moment();
+                $('#daterange').daterangepicker({
+                    startDate: dateFromVal,
+                    endDate: dateToVal,
+                    parentEl:'.filter',
+                    ranges:{
+                        'Today': moment(),
+                        'Week': [moment().startOf('week'), moment()],
+                        'Month': [moment().startOf('month'), moment()],
+                        'Quarter': [moment().startOf('quarter'), moment()],
+                        'Year': [moment().startOf('year'), moment()]
+                    }
+                });
+                $('#daterange').on('apply.daterangepicker', function(ev, picker) {
+                    columnDef.dateValues[0] = picker.startDate.format('DD-MM-YYYY');
+                    columnDef.dateValues[1] = picker.endDate.format('DD-MM-YYYY');
+                });
+                $('#daterange').on('cancel.daterangepicker', function(ev, picker) {
+                    $('#daterange').val('');
+                });
+            }
 
             $('<button>OK</button>')
                 .appendTo($menu)
@@ -212,8 +241,16 @@
                             );
                             break;
                         case filterType.PERCENTAGE:
+                            columnDef.percentageValues = workingFilters.splice(0);
+                            setButtonImage($menuButton,
+                                    columnDef.percentageValues.length > 0
+                            );
                             break;
                         case filterType.DATE:
+//                            columnDef.dateValues = workingFilters.splice(0);
+                            setButtonImage($menuButton,
+                                    columnDef.dateValues.length > 1
+                            );
                             break;
                     }
 
@@ -251,6 +288,11 @@
             $('#to', $filter).bind('change keyup', function () {
                 workingFilters[1] = $(this).val();
             });
+
+            $('#percentage', $filter).bind('change keyup', function () {
+                workingFilters[0] = $(this).val();
+            });
+
 
             var offset = $(this).offset();
             var left = offset.left - $menu.width() + $(this).width() - 8;
@@ -376,8 +418,16 @@
 
                         break;
                     case filterType.PERCENTAGE:
+                        var percentageValues = col.percentageValues;
+                        if (percentageValues && percentageValues.length > 0) {
+                            value = value & item[col.field] <= percentageValues[0];
+                        }
                         break;
                     case filterType.DATE:
+                        var dateValues = col.dateValues;
+                        if (dateValues && dateValues.length > 1) {
+                            value = value & moment(dateValues[0]).isBefore(item[col.field]) & moment(dateValues[1]).isAfter(item[col.field]);
+                        }
                         break;
                 }
             }
